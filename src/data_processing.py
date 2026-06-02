@@ -1,28 +1,131 @@
 import pandas as pd
+import numpy as np
+
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+from sklearn.preprocessing import (
+    OneHotEncoder,
+    StandardScaler
+)
+
+from sklearn.impute import SimpleImputer
 
 
-def load_data(path):
+def create_aggregate_features(df):
 
-    df = pd.read_csv(path)
+    customer_features = df.groupby(
+        "CustomerId"
+    ).agg({
+
+        "Amount":[
+            "sum",
+            "mean",
+            "count",
+            "std"
+        ]
+
+    })
+
+    customer_features.columns=[
+
+        "total_amount",
+        "avg_amount",
+        "transaction_count",
+        "std_amount"
+
+    ]
+
+    customer_features.reset_index(
+        inplace=True
+    )
+
+    return customer_features
+
+
+def extract_time_features(df):
+
+    df["TransactionStartTime"] = pd.to_datetime(
+        df["TransactionStartTime"]
+    )
+
+    df["hour"]=df[
+        "TransactionStartTime"
+    ].dt.hour
+
+    df["day"]=df[
+        "TransactionStartTime"
+    ].dt.day
+
+    df["month"]=df[
+        "TransactionStartTime"
+    ].dt.month
+
+    df["year"]=df[
+        "TransactionStartTime"
+    ].dt.year
 
     return df
 
 
-def summarize(df):
+def build_pipeline(df):
 
-    print(df.info())
+    numeric = df.select_dtypes(
+        include=np.number
+    ).columns
 
-    print(df.describe())
+    categorical = df.select_dtypes(
+        exclude=np.number
+    ).columns
 
+    num_pipe = Pipeline([
 
-def missing_values(df):
+        (
+            "imputer",
+            SimpleImputer(
+                strategy="median"
+            )
+        ),
 
-    return df.isnull().sum()
+        (
+            "scaler",
+            StandardScaler()
+        )
 
+    ])
 
-def transaction_statistics(df):
+    cat_pipe = Pipeline([
 
-    return df[[
-        "Amount",
-        "Value"
-    ]].describe()
+        (
+            "imputer",
+            SimpleImputer(
+                strategy="most_frequent"
+            )
+        ),
+
+        (
+            "encoder",
+            OneHotEncoder(
+                handle_unknown="ignore"
+            )
+        )
+
+    ])
+
+    preprocessor=ColumnTransformer([
+
+        (
+            "num",
+            num_pipe,
+            numeric
+        ),
+
+        (
+            "cat",
+            cat_pipe,
+            categorical
+        )
+
+    ])
+
+    return preprocessor
